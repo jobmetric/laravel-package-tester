@@ -1,0 +1,55 @@
+{
+    "name": "jobmetric/laravel-package-tester",
+    "description": "This package is used to quickly test a package with all its components installed in Laravel.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "jobmetric",
+        "laravel",
+        "package",
+        "workflow",
+        "flow"
+    ],
+    "homepage": "https://doc.jobmetric.net/package/laravel-package-tester",
+    "require": {
+        "php": ">=8.0.1",
+        "laravel/framework": ">=9.19"
+    },
+    "autoload": {
+        "psr-4": {
+            "JobMetric\\PackageTester\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "JobMetric\\PackageTester\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "JobMetric\\PackageTester\\PackageTesterServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "support": {
+        "issues": "https://github.com/jobmetric/laravel-package-tester/issues",
+        "forum": "https://twitter.com/jobmetric",
+        "source": "https://github.com/jobmetric/laravel-package-tester"
+    },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/majidmohammadian"
+        }
+    ],
+    "authors": [
+        {
+            "name": "Majid Mohammadian",
+            "email": "majeedmohammadian@gmail.com",
+            "homepage": "https://www.linkedin.com/in/majidmohammadian/",
+            "role": "Full Stack Developer"
+        }
+    ]
+}
