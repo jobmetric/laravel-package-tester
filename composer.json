@@ -10,7 +10,7 @@
         "workflow",
         "flow"
     ],
-    "homepage": "https://doc.jobmetric.net/package/laravel-package-tester",
+    "homepage": "https://jobmetric.github.io/packages/laravel-package-tester",
     "require": {
         "php": ">=8.0.1",
         "laravel/framework": ">=9.19"
