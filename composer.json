@@ -13,7 +13,9 @@
     "homepage": "https://jobmetric.github.io/packages/laravel-package-tester",
     "require": {
         "php": ">=8.0.1",
-        "laravel/framework": ">=9.19"
+        "laravel/framework": ">=9.19",
+        "jobmetric/laravel-package-core": "dev-master",
+        "jobmetric/package-tester-composer-plugin": "dev-main"
     },
     "autoload": {
         "psr-4": {
