@@ -15,7 +15,7 @@
         "php": ">=8.0.1",
         "laravel/framework": ">=9.19",
         "jobmetric/laravel-package-core": "dev-master",
-        "jobmetric/package-tester-composer-plugin": "dev-main"
+        "jobmetric/package-tester-composer-plugin": "dev-master"
     },
     "autoload": {
         "psr-4": {
@@ -34,7 +34,8 @@
             ]
         }
     },
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
+    "prefer-stable": true,
     "support": {
         "issues": "https://github.com/jobmetric/laravel-package-tester/issues",
         "forum": "https://twitter.com/jobmetric",
@@ -52,6 +53,12 @@
             "email": "majeedmohammadian@gmail.com",
             "homepage": "https://www.linkedin.com/in/majidmohammadian/",
             "role": "Full Stack Developer"
+        },
+        {
+            "name": "Matin Bagheri",
+            "email": "themainmatin@gmail.com",
+            "homepage": "https://www.linkedin.com/in/bagherimatin/",
+            "role": "PHP Developer"
         }
     ]
 }
