@@ -1,0 +1,266 @@
+name: Tester
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: PHP version.
+        required: false
+        default: "8.2"
+        type: string
+      laravel-version:
+        description: Laravel version for sandbox app.
+        required: false
+        default: "^9.0"
+        type: string
+      date_format:
+        description: "Date format"
+        required: false
+        type: string
+      calendar_type:
+        description: "Calendar type"
+        required: false
+        type: string
+        default: "jalali"
+      timezone:
+        description: "Timezone"
+        required: false
+        type: string
+        default: "UTC"
+      package-name:
+        description: "Package name to test (e.g., jobmetric/laravel-env-modifier). If not provided, will be read from composer.json"
+        required: false
+        type: string
+    secrets:
+      bot_token:
+        description: "Telegram bot token created via BotFather"
+        required: false
+      chat_id:
+        description: "Target Telegram chat ID (user, group, or channel)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: PR Package Test (PHP ${{ inputs.php-version }})
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: .ci/laravel-app
+      PACKAGE_DIR: package-under-test
+      TESTER_PACKAGE: jobmetric/laravel-package-tester:dev-main
+      TARGET_PACKAGE_VERSION: "*"
+    steps:
+      - name: Checkout PR package repository
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.PACKAGE_DIR }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          tools: composer:v2
+          coverage: none
+          extensions: ${{ inputs.date_format != '' && inputs.date_format != null && 'intl' || '' }}
+
+      - name: Resolve package name
+        id: package
+        run: |
+          set -euo pipefail
+
+          if [ -n "${{ inputs.package-name }}" ]; then
+            package_name="${{ inputs.package-name }}"
+          else
+            composer_file="${PACKAGE_DIR}/composer.json"
+            if [ ! -f "$composer_file" ]; then
+              echo "composer.json was not found at ${composer_file}" >&2
+              exit 1
+            fi
+
+            package_name=$(php -r '$data = json_decode(file_get_contents($argv[1]), true); if (!is_array($data) || empty($data["name"])) {fwrite(STDERR, "composer.json does not include a valid name.\n"); exit(1);} echo $data["name"];' "$composer_file")
+          fi
+
+          echo "name=${package_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Create sandbox and install packages
+        run: |
+          set -euo pipefail
+
+          rm -rf "$APP_DIR"
+          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel-version }}" --no-interaction --prefer-dist
+          cd "$APP_DIR"
+
+          composer config --no-interaction minimum-stability dev
+          composer config --no-interaction prefer-stable true
+          composer config --no-interaction allow-plugins.jobmetric/package-tester-composer-plugin true
+          composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false}}"
+
+          if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
+            composer require --dev --no-interaction --no-progress "$TESTER_PACKAGE"
+          fi
+
+          composer require --dev --no-interaction --no-progress "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
+
+          composer install --no-interaction --no-progress --prefer-dist
+          composer dump-autoload --no-interaction --no-progress -o
+
+      - name: Prepare Laravel application
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
+          fi
+
+          php artisan key:generate --force
+
+      - name: Run package tests with laravel-package-tester
+        id: package_tests
+        continue-on-error: true
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -euo pipefail
+
+          php artisan test-run "${{ steps.package.outputs.name }}" --detailed
+
+      - name: Find Date Converter Script
+        if: ${{ inputs.date_format != '' && inputs.date_format != null }}
+        id: find_script
+        run: |
+          SCRIPT_PATH=""
+          if [ -f "packages/multi-calendar/bin/date-converter.sh" ]; then
+            SCRIPT_PATH="packages/multi-calendar/bin/date-converter.sh"
+          elif [ -f "./packages/multi-calendar/bin/date-converter.sh" ]; then
+            SCRIPT_PATH="./packages/multi-calendar/bin/date-converter.sh"
+          else
+            FIND_SCRIPT=$(find . -name "date-converter.sh" -path "*/multi-calendar/bin/*" | head -n 1)
+            if [ -n "$FIND_SCRIPT" ]; then
+              SCRIPT_PATH="$FIND_SCRIPT"
+            fi
+          fi
+          
+          if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
+            echo "Error: date-converter.sh not found"
+            exit 1
+          fi
+          
+          chmod +x "$SCRIPT_PATH"
+          echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
+
+      - name: Check Telegram secrets availability
+        id: check_telegram_secrets
+        if: always()
+        run: |
+          if [ -n "${{ secrets.bot_token }}" ] && [ -n "${{ secrets.chat_id }}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify Telegram on failure
+        if: ${{ always() && steps.package_tests.outcome == 'failure' && steps.check_telegram_secrets.outputs.available == 'true' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
+          TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DATE_FORMAT: ${{ inputs.date_format }}
+          CALENDAR_TYPE: ${{ inputs.calendar_type }}
+          TIMEZONE: ${{ inputs.timezone }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram credentials not set. Skipping notification."
+            exit 0
+          fi
+
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          CREATED_DATE="$CURRENT_TIME"
+          
+          if [ -n "$DATE_FORMAT" ] && [ -n "${{ steps.find_script.outputs.script_path }}" ]; then
+            SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
+            
+            if [ ! -f "$SCRIPT_PATH" ]; then
+              echo "Warning: Script not found at $SCRIPT_PATH, using default date format"
+            else
+              if [ ! -x "$SCRIPT_PATH" ]; then
+                chmod +x "$SCRIPT_PATH"
+              fi
+              
+              TARGET_CAL="${DATE_FORMAT}"
+              if [ "$DATE_FORMAT" == "both" ]; then
+                 TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+              fi
+              
+              TARGET_TIMEZONE="${TIMEZONE:-UTC}"
+              if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
+                TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+              fi
+              
+              DATE_TO_CONVERT="$CURRENT_TIME"
+              FORMAT_INPUT="Y-m-d\\TH:i:s"
+              
+              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+              EXIT_CODE=$?
+              
+              if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+                 if [ "$DATE_FORMAT" == "both" ]; then
+                   CREATED_DATE="${CURRENT_TIME} / ${CONVERTED} ${TARGET_TIMEZONE}"
+                 else
+                   CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
+                 fi
+              else
+                echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
+                CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
+              fi
+            fi
+          elif [ -n "$CURRENT_TIME" ]; then
+            CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
+          else
+            CREATED_DATE="N/A"
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_NUMBER:-}" ]; then
+            context_line="PR #${PR_NUMBER}"
+          else
+            context_line="Event: ${EVENT_NAME}"
+          fi
+
+          MESSAGE="❌ Package tests failed"$'\n'
+          MESSAGE="${MESSAGE}Repository: <b><code>${REPOSITORY}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Package: <b><code>${PACKAGE_NAME}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}${context_line}"$'\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}<a href=\"${RUN_URL}\">View Run on GitHub</a>"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=$MESSAGE" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Telegram notification sent successfully"
+          else
+            echo "❌ Failed to send Telegram notification"
+            echo "HTTP Code: $HTTP_CODE"
+            echo "Response: $BODY"
+          fi
+
+      - name: Telegram notification skipped (secret not set)
+        if: ${{ always() && steps.package_tests.outcome == 'failure' && steps.check_telegram_secrets.outputs.available == 'false' }}
+        run: echo "Telegram secrets are not configured. Notification was skipped."
+
+      - name: Fail workflow if tests failed
+        if: ${{ steps.package_tests.outcome == 'failure' }}
+        run: exit 1
