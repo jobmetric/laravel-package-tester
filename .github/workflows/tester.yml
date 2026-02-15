@@ -86,9 +86,12 @@ jobs:
           echo "name=${package_name}" >> "$GITHUB_OUTPUT"
 
       - name: Create sandbox and install packages
+        env:
+          COMPOSER_AUDIT: false
         run: |
           set -euo pipefail
 
+          composer config --global audit.block-insecure false
           rm -rf "$APP_DIR"
           composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel-version }}" --no-interaction --prefer-dist --no-audit
           cd "$APP_DIR"
