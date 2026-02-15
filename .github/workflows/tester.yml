@@ -104,7 +104,7 @@ jobs:
           
           if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
             composer config --json --no-interaction repositories.tester_package "{\"type\":\"vcs\",\"url\":\"https://github.com/jobmetric/laravel-package-tester.git\"}"
-            composer require --no-interaction --no-progress --no-update "$TESTER_PACKAGE:dev-main" || echo "Warning: Could not add tester package, continuing..."
+            composer require --no-interaction --no-progress --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
           fi
 
           composer require --no-interaction --no-progress --no-update "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
