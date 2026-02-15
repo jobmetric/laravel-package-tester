@@ -51,6 +51,7 @@ jobs:
       PACKAGE_DIR: package-under-test
       TESTER_PACKAGE: jobmetric/laravel-package-tester:dev-main
       TARGET_PACKAGE_VERSION: "*"
+      COMPOSER_AUDIT: false
     steps:
       - name: Checkout PR package repository
         uses: actions/checkout@v4
