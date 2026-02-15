@@ -96,14 +96,13 @@ jobs:
           composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel-version }}" --no-interaction --prefer-dist
           cd "$APP_DIR"
 
-          composer config --no-interaction minimum-stability dev
+          composer config --no-interaction minimum-stability stable
           composer config --no-interaction prefer-stable true
           composer config --no-interaction allow-plugins.jobmetric/package-tester-composer-plugin true
           composer config --no-interaction audit.block-insecure false
           composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false}}"
           
           if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
-            composer config --json --no-interaction repositories.tester_package "{\"type\":\"vcs\",\"url\":\"https://github.com/jobmetric/laravel-package-tester.git\"}"
             composer require --no-interaction --no-progress --no-update "$TESTER_PACKAGE" || echo "Warning: Could not add tester package, continuing..."
           fi
 
