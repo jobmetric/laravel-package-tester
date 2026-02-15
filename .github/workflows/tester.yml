@@ -50,7 +50,7 @@ jobs:
       APP_DIR: .ci/laravel-app
       PACKAGE_DIR: package-under-test
       TESTER_PACKAGE: jobmetric/laravel-package-tester:dev-master
-      TARGET_PACKAGE_VERSION: "*"
+      TARGET_PACKAGE_VERSION: "@dev"
       COMPOSER_AUDIT: false
     steps:
       - name: Checkout PR package repository
@@ -104,10 +104,10 @@ jobs:
           
           if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
             composer config --json --no-interaction repositories.tester_package "{\"type\":\"vcs\",\"url\":\"https://github.com/jobmetric/laravel-package-tester.git\"}"
-            composer require --dev --no-interaction --no-progress --no-update "$TESTER_PACKAGE" || echo "Warning: Could not add tester package, continuing..."
+            composer require --no-interaction --no-progress --no-update "$TESTER_PACKAGE" || echo "Warning: Could not add tester package, continuing..."
           fi
 
-          composer require --dev --no-interaction --no-progress --no-update "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
+          composer require --no-interaction --no-progress --no-update "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
 
           composer update --no-interaction --no-progress --prefer-dist --with-all-dependencies
           composer dump-autoload --no-interaction --no-progress -o
