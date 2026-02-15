@@ -14,7 +14,7 @@
     "require": {
         "php": ">=8.0.1",
         "laravel/framework": ">=9.19",
-        "jobmetric/laravel-package-core": "dev-master",
+        "jobmetric/laravel-package-core": "1.35",
         "jobmetric/package-tester-composer-plugin": "dev-master"
     },
     "autoload": {
