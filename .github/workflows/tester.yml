@@ -93,7 +93,7 @@ jobs:
 
           composer config --global audit.block-insecure false
           rm -rf "$APP_DIR"
-          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel-version }}" --no-interaction --prefer-dist --no-audit
+          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel-version }}" --no-interaction --prefer-dist
           cd "$APP_DIR"
 
           composer config --no-interaction minimum-stability dev
@@ -103,13 +103,12 @@ jobs:
           composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false}}"
           
           if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
-            composer config --json --no-interaction repositories.tester_package "{\"type\":\"vcs\",\"url\":\"https://github.com/jobmetric/laravel-package-tester.git\"}"
-            composer require --dev --no-interaction --no-progress --no-audit "$TESTER_PACKAGE" || echo "Warning: Could not install tester package, continuing..."
+            composer require --dev --no-interaction --no-progress "$TESTER_PACKAGE" || echo "Warning: Could not install tester package, continuing..."
           fi
 
-          composer require --dev --no-interaction --no-progress --no-audit "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
+          composer require --dev --no-interaction --no-progress "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
 
-          composer install --no-interaction --no-progress --prefer-dist --no-audit
+          composer install --no-interaction --no-progress --prefer-dist
           composer dump-autoload --no-interaction --no-progress -o
 
       - name: Prepare Laravel application
