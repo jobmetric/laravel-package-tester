@@ -172,12 +172,12 @@ jobs:
           fi
           
           if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
-            echo "Error: date-converter.sh not found"
-            exit 1
+            echo "Warning: date-converter.sh not found. Date conversion will be skipped."
+            echo "script_path=" >> $GITHUB_OUTPUT
+          else
+            chmod +x "$SCRIPT_PATH"
+            echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
           fi
-          
-          chmod +x "$SCRIPT_PATH"
-          echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
 
       - name: Check Telegram secrets availability
         id: check_telegram_secrets
@@ -213,8 +213,8 @@ jobs:
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           CREATED_DATE="$CURRENT_TIME"
           
-          if [ -n "$DATE_FORMAT" ] && [ -n "${{ steps.find_script.outputs.script_path }}" ]; then
-            SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
+          SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
+          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
             
             if [ ! -f "$SCRIPT_PATH" ]; then
               echo "Warning: Script not found at $SCRIPT_PATH, using default date format"
