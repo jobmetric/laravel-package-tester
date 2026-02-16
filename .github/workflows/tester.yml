@@ -100,16 +100,19 @@ jobs:
           composer config --no-interaction prefer-stable true
           composer config --no-interaction allow-plugins.jobmetric/package-tester-composer-plugin true
           composer config --no-interaction audit.block-insecure false
+          
           composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false}}"
           
+          # Install orchestra/testbench first to ensure it's available for package tests
+          composer require --dev --no-interaction --no-update orchestra/testbench || echo "Warning: Could not add orchestra/testbench, continuing..."
+          
           if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
-            composer config --json --no-interaction repositories.tester_package "{\"type\":\"vcs\",\"url\":\"https://github.com/jobmetric/laravel-package-tester.git\"}"
-            composer require --no-interaction  --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
+            composer require --no-interaction --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
           fi
 
-          composer require --no-interaction  --no-update "${{ steps.package.outputs.name }}:${TARGET_PACKAGE_VERSION}"
+          composer require --dev --no-interaction -w "${{ steps.package.outputs.name }}:@dev"
 
-          composer update --no-interaction  --prefer-dist --with-all-dependencies
+          composer update --no-interaction --prefer-dist --with-all-dependencies
           composer dump-autoload --no-interaction  -o
 
       - name: Prepare Laravel application
