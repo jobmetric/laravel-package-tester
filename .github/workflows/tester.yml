@@ -286,6 +286,98 @@ jobs:
             echo "Response: $BODY"
           fi
 
+      - name: Notify Telegram on success
+        if: ${{ always() && steps.package_tests.outcome == 'success' && steps.check_telegram_secrets.outputs.available == 'true' }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
+          TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DATE_FORMAT: ${{ inputs.date_format }}
+          CALENDAR_TYPE: ${{ inputs.calendar_type }}
+          TIMEZONE: ${{ inputs.timezone }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram credentials not set. Skipping notification."
+            exit 0
+          fi
+
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          CREATED_DATE="$CURRENT_TIME"
+          
+          SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
+          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+            if [ ! -x "$SCRIPT_PATH" ]; then
+              chmod +x "$SCRIPT_PATH"
+            fi
+            
+            TARGET_CAL="${DATE_FORMAT}"
+            if [ "$DATE_FORMAT" == "both" ]; then
+               TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+            fi
+            
+            TARGET_TIMEZONE="${TIMEZONE:-UTC}"
+            if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
+              TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+            fi
+            
+            DATE_TO_CONVERT="$CURRENT_TIME"
+            FORMAT_INPUT="Y-m-d\\TH:i:s"
+            
+            CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
+            EXIT_CODE=$?
+            
+            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
+               if [ "$DATE_FORMAT" == "both" ]; then
+                 CREATED_DATE="${CURRENT_TIME} / ${CONVERTED} ${TARGET_TIMEZONE}"
+               else
+                 CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
+               fi
+            else
+              echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
+              CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
+            fi
+          elif [ -n "$CURRENT_TIME" ]; then
+            CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
+          else
+            CREATED_DATE="N/A"
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_NUMBER:-}" ]; then
+            context_line="PR #${PR_NUMBER}"
+          else
+            context_line="Event: ${EVENT_NAME}"
+          fi
+
+          MESSAGE="✅ Package tests passed"$'\n'
+          MESSAGE="${MESSAGE}Repository: <b><code>${REPOSITORY}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}Package: <b><code>${PACKAGE_NAME}</code></b>"$'\n'
+          MESSAGE="${MESSAGE}${context_line}"$'\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}<a href=\"${RUN_URL}\">View Run on GitHub</a>"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TELEGRAM_CHAT_ID" \
+            --data-urlencode "text=$MESSAGE" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview=true)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Telegram notification sent successfully"
+          else
+            echo "❌ Failed to send Telegram notification"
+            echo "HTTP Code: $HTTP_CODE"
+            echo "Response: $BODY"
+          fi
+
       - name: Telegram notification skipped (secret not set)
         if: ${{ always() && steps.package_tests.outcome == 'failure' && steps.check_telegram_secrets.outputs.available == 'false' }}
         run: echo "Telegram secrets are not configured. Notification was skipped."
