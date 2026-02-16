@@ -103,8 +103,28 @@ jobs:
           
           composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false}}"
           
+          # Determine orchestra/testbench version based on Laravel version
+          LARAVEL_VERSION="${{ inputs.laravel-version }}"
+          # Extract major version number (e.g., "9" from "^9.0" or "10" from "^10.0")
+          LARAVEL_MAJOR=$(echo "$LARAVEL_VERSION" | grep -oE '[0-9]+' | head -1)
+          
+          if [ -z "$LARAVEL_MAJOR" ]; then
+            LARAVEL_MAJOR=9
+          fi
+          
+          if [ "$LARAVEL_MAJOR" -ge 12 ]; then
+            TESTBENCH_VERSION="^10.0"
+          elif [ "$LARAVEL_MAJOR" -ge 11 ]; then
+            TESTBENCH_VERSION="^9.0"
+          elif [ "$LARAVEL_MAJOR" -ge 10 ]; then
+            TESTBENCH_VERSION="^8.0"
+          else
+            # Default to ^7.0 for Laravel 9 and below
+            TESTBENCH_VERSION="^7.0"
+          fi
+          
           # Install orchestra/testbench first to ensure it's available for package tests
-          composer require --dev --no-interaction --no-update orchestra/testbench || echo "Warning: Could not add orchestra/testbench, continuing..."
+          composer require --dev --no-interaction --no-update "orchestra/testbench:${TESTBENCH_VERSION}" || echo "Warning: Could not add orchestra/testbench, continuing..."
           
           if [ "${{ steps.package.outputs.name }}" != "jobmetric/laravel-package-tester" ]; then
             composer require --no-interaction --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
