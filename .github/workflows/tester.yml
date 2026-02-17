@@ -34,10 +34,10 @@ on:
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
-        required: false
+        required: true
       chat_id:
         description: "Target Telegram chat ID (user, group, or channel)"
-        required: false
+        required: true
 
 permissions:
   contents: read
@@ -131,6 +131,11 @@ jobs:
           fi
 
           composer require --dev --no-interaction -w "${{ steps.package.outputs.name }}:@dev"
+          
+          # Install multi-calendar package if date_format is provided (for date conversion script)
+          if [ -n "${{ inputs.date_format }}" ] && [ "${{ inputs.date_format }}" != "" ]; then
+            composer require --no-interaction --no-update "jobmetric/multi-calendar" || echo "Warning: Could not add multi-calendar package, continuing..."
+          fi
 
           composer update --no-interaction --prefer-dist --with-all-dependencies
           composer dump-autoload --no-interaction  -o
@@ -159,38 +164,18 @@ jobs:
         if: ${{ inputs.date_format != '' && inputs.date_format != null }}
         id: find_script
         run: |
-          SCRIPT_PATH=""
-          if [ -f "packages/multi-calendar/bin/date-converter.sh" ]; then
-            SCRIPT_PATH="packages/multi-calendar/bin/date-converter.sh"
-          elif [ -f "./packages/multi-calendar/bin/date-converter.sh" ]; then
-            SCRIPT_PATH="./packages/multi-calendar/bin/date-converter.sh"
-          else
-            FIND_SCRIPT=$(find . -name "date-converter.sh" -path "*/multi-calendar/bin/*" | head -n 1)
-            if [ -n "$FIND_SCRIPT" ]; then
-              SCRIPT_PATH="$FIND_SCRIPT"
-            fi
-          fi
+          SCRIPT_PATH="vendor/jobmetric/multi-calendar/bin/date-converter.sh"
           
-          if [ -z "$SCRIPT_PATH" ] || [ ! -f "$SCRIPT_PATH" ]; then
-            echo "Warning: date-converter.sh not found. Date conversion will be skipped."
-            echo "script_path=" >> $GITHUB_OUTPUT
-          else
+          if [ -f "$SCRIPT_PATH" ]; then
             chmod +x "$SCRIPT_PATH"
             echo "script_path=$SCRIPT_PATH" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check Telegram secrets availability
-        id: check_telegram_secrets
-        if: always()
-        run: |
-          if [ -n "${{ secrets.bot_token }}" ] && [ -n "${{ secrets.chat_id }}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Warning: date-converter.sh not found at $SCRIPT_PATH. Date conversion will be skipped."
+            echo "script_path=" >> $GITHUB_OUTPUT
           fi
 
       - name: Notify Telegram on failure
-        if: ${{ always() && steps.package_tests.outcome == 'failure' && steps.check_telegram_secrets.outputs.available == 'true' }}
+        if: ${{ always() && steps.package_tests.outcome == 'failure' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
           TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
@@ -206,8 +191,8 @@ jobs:
           set -euo pipefail
 
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram credentials not set. Skipping notification."
-            exit 0
+            echo "❌ Telegram credentials are required but not set."
+            exit 1
           fi
 
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -284,10 +269,11 @@ jobs:
             echo "❌ Failed to send Telegram notification"
             echo "HTTP Code: $HTTP_CODE"
             echo "Response: $BODY"
+            exit 1
           fi
 
       - name: Notify Telegram on success
-        if: ${{ always() && steps.package_tests.outcome == 'success' && steps.check_telegram_secrets.outputs.available == 'true' }}
+        if: ${{ always() && steps.package_tests.outcome == 'success' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
           TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
@@ -303,8 +289,8 @@ jobs:
           set -euo pipefail
 
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram credentials not set. Skipping notification."
-            exit 0
+            echo "❌ Telegram credentials are required but not set."
+            exit 1
           fi
 
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -376,11 +362,8 @@ jobs:
             echo "❌ Failed to send Telegram notification"
             echo "HTTP Code: $HTTP_CODE"
             echo "Response: $BODY"
+            exit 1
           fi
-
-      - name: Telegram notification skipped (secret not set)
-        if: ${{ always() && steps.package_tests.outcome == 'failure' && steps.check_telegram_secrets.outputs.available == 'false' }}
-        run: echo "Telegram secrets are not configured. Notification was skipped."
 
       - name: Fail workflow if tests failed
         if: ${{ steps.package_tests.outcome == 'failure' }}
