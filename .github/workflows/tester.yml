@@ -43,9 +43,6 @@ jobs:
   tests:
     name: PR Package Test (PHP ${{ inputs.php-version }})
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
     env:
       APP_DIR: .ci/laravel-app
       PACKAGE_DIR: package-under-test
