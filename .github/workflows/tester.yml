@@ -43,6 +43,9 @@ jobs:
   tests:
     name: PR Package Test (PHP ${{ inputs.php-version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       APP_DIR: .ci/laravel-app
       PACKAGE_DIR: package-under-test
@@ -50,6 +53,20 @@ jobs:
       TARGET_PACKAGE_VERSION: "@dev"
       COMPOSER_AUDIT: false
     steps:
+      - name: 🟡 Starting
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            ⏳ Starting tests...
+            
+            **Package:** `${{ inputs.package-name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php-version }}`
+            **Laravel Version:** `${{ inputs.laravel-version }}`
+
       - name: Checkout PR package repository
         uses: actions/checkout@v4
         with:
@@ -81,6 +98,20 @@ jobs:
           fi
 
           echo "name=${package_name}" >> "$GITHUB_OUTPUT"
+
+      - name: 🔵 Installing
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [██░░░░░░░░] 20% - Installing dependencies...
+            
+            **Package:** `${{ inputs.package-name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php-version }}`
+            **Laravel Version:** `${{ inputs.laravel-version }}`
 
       - name: Create sandbox and install packages
         env:
@@ -148,6 +179,20 @@ jobs:
 
           php artisan key:generate --force
 
+      - name: 🟣 Testing
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [██████░░░░] 60% - Running tests...
+            
+            **Package:** `${{ inputs.package-name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php-version }}`
+            **Laravel Version:** `${{ inputs.laravel-version }}`
+
       - name: Run package tests with laravel-package-tester
         id: package_tests
         continue-on-error: true
@@ -170,6 +215,24 @@ jobs:
             echo "Warning: date-converter.sh not found at $SCRIPT_PATH. Date conversion will be skipped."
             echo "script_path=" >> $GITHUB_OUTPUT
           fi
+
+      - name: ✅ Final Result
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Results
+            
+            [██████████] 100% - Done!
+            
+            **Package:** `${{ steps.package.outputs.name }}`
+            **PHP Version:** `${{ inputs.php-version }}`
+            **Laravel Version:** `${{ inputs.laravel-version }}`
+            
+            ### ${{ steps.package_tests.outcome == 'success' && '✅ All Tests Passed!' || '❌ Tests Failed!' }}
+            
+            **Run URL:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
       - name: Notify Telegram on failure
         if: ${{ always() && steps.package_tests.outcome == 'failure' }}
