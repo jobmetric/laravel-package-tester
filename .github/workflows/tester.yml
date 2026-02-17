@@ -185,19 +185,6 @@ jobs:
             echo "script_path=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Validate Telegram secrets
-        run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
-            echo "❌ Telegram secrets are required but not set!"
-            echo ""
-            echo "Please ensure secrets are passed in the calling workflow:"
-            echo "  secrets:"
-            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
-            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
-            exit 1
-          fi
-          echo "✅ Telegram secrets are properly configured"
-
       - name: Debug Telegram secrets
         if: always()
         env:
