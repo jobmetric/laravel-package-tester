@@ -34,13 +34,10 @@ on:
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
-        required: false
+        required: true
       chat_id:
         description: "Target Telegram chat ID (user, group, or channel)"
-        required: false
-
-permissions:
-  contents: read
+        required: true
 
 jobs:
   tests:
