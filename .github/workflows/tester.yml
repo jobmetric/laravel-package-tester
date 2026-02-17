@@ -53,17 +53,6 @@ jobs:
       TARGET_PACKAGE_VERSION: "@dev"
       COMPOSER_AUDIT: false
     steps:
-      - name: Debug workflow start
-        run: |
-          echo "=== Workflow Started ==="
-          echo "Repository: ${{ github.repository }}"
-          echo "Event: ${{ github.event_name }}"
-          echo "Workflow: ${{ github.workflow }}"
-          echo "Run ID: ${{ github.run_id }}"
-          echo "Secrets bot_token exists: ${{ secrets.bot_token != '' }}"
-          echo "Secrets chat_id exists: ${{ secrets.chat_id != '' }}"
-          echo "=== End Debug ==="
-
       - name: Checkout PR package repository
         uses: actions/checkout@v4
         with:
@@ -184,67 +173,6 @@ jobs:
             echo "Warning: date-converter.sh not found at $SCRIPT_PATH. Date conversion will be skipped."
             echo "script_path=" >> $GITHUB_OUTPUT
           fi
-
-      - name: Debug Telegram secrets
-        if: always()
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
-          TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
-        run: |
-          echo "=== Telegram Secrets Debug ==="
-          echo "Repository: ${{ github.repository }}"
-          echo "Workflow: ${{ github.workflow }}"
-          echo "Run ID: ${{ github.run_id }}"
-          echo ""
-          echo "Checking secrets availability..."
-          
-          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ "$TELEGRAM_BOT_TOKEN" != "null" ]; then
-            TOKEN_LEN=${#TELEGRAM_BOT_TOKEN}
-            echo "✅ bot_token is set (length: $TOKEN_LEN)"
-          else
-            echo "❌ bot_token is empty or not set"
-          fi
-          
-          if [ -n "$TELEGRAM_CHAT_ID" ] && [ "$TELEGRAM_CHAT_ID" != "null" ]; then
-            echo "✅ chat_id is set: $TELEGRAM_CHAT_ID"
-          else
-            echo "❌ chat_id is empty or not set"
-          fi
-          
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
-            echo ""
-            echo "⚠️  IMPORTANT: Secrets are empty!"
-            echo ""
-            echo "To fix this issue, you need to:"
-            echo ""
-            echo "1. Check Organization Secrets Access:"
-            echo "   - Go to: https://github.com/organizations/jobmetric/settings/secrets/actions"
-            echo "   - Find: TELEGRAM_NOTIFICATION_BOT_TOKEN and TELEGRAM_NOTIFICATION_CHAT_ID"
-            echo "   - Under 'Repository access', ensure 'All repositories' is selected"
-            echo "   - OR add 'laravel-env-modifier' repository specifically"
-            echo ""
-            echo "2. Verify Calling Workflow:"
-            echo "   In your calling workflow (.github/workflows/*.yml), ensure:"
-            echo "   secrets:"
-            echo "     bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
-            echo "     chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
-            echo ""
-            echo "3. Alternative: Add secrets to repository level:"
-            echo "   - Go to: https://github.com/jobmetric/laravel-env-modifier/settings/secrets/actions"
-            echo "   - Add: TELEGRAM_NOTIFICATION_BOT_TOKEN"
-            echo "   - Add: TELEGRAM_NOTIFICATION_CHAT_ID"
-            echo ""
-            echo "4. Test secrets availability in calling workflow:"
-            echo "   Add a debug step in your calling workflow to verify:"
-            echo "   - name: Debug secrets"
-            echo "     run: |"
-            echo "       echo 'BOT_TOKEN exists: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN != \"\" }}'"
-            echo "       echo 'CHAT_ID exists: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID != \"\" }}'"
-          else
-            echo ""
-            echo "✅ All Telegram secrets are properly configured!"
-          fi
-          echo "=== End Debug ==="
 
       - name: Notify Telegram on failure
         if: ${{ always() && steps.package_tests.outcome == 'failure' }}
