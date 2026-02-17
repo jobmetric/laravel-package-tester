@@ -174,6 +174,43 @@ jobs:
             echo "script_path=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Debug Telegram secrets
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
+          TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
+        run: |
+          echo "=== Telegram Secrets Debug ==="
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "Checking secrets availability..."
+          
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ "$TELEGRAM_BOT_TOKEN" != "null" ]; then
+            TOKEN_LEN=${#TELEGRAM_BOT_TOKEN}
+            echo "✅ bot_token is set (length: $TOKEN_LEN)"
+          else
+            echo "❌ bot_token is empty or not set"
+          fi
+          
+          if [ -n "$TELEGRAM_CHAT_ID" ] && [ "$TELEGRAM_CHAT_ID" != "null" ]; then
+            echo "✅ chat_id is set: $TELEGRAM_CHAT_ID"
+          else
+            echo "❌ chat_id is empty or not set"
+          fi
+          
+          echo ""
+          echo "Note: If secrets are empty, make sure:"
+          echo "  1. Secrets are defined in the calling workflow's repository or organization"
+          echo "  2. Secrets are passed correctly in the workflow_call secrets section:"
+          echo "     secrets:"
+          echo "       bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+          echo "       chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+          echo "  3. The calling workflow has access to organization secrets"
+          echo "  4. Organization secrets are accessible to all repositories in the organization"
+          echo "=== End Debug ==="
+
       - name: Notify Telegram on failure
         if: ${{ always() && steps.package_tests.outcome == 'failure' }}
         env:
@@ -190,10 +227,38 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ Telegram credentials are required but not set."
+          echo "=== Checking Telegram Credentials ==="
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ]; then
+            echo "❌ TELEGRAM_BOT_TOKEN is required but not set or empty"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Ensure secrets are defined in the calling repository or organization"
+            echo "  2. Check that secrets are passed in workflow_call:"
+            echo "     secrets:"
+            echo "       bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+            echo "       chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+            echo "  3. Verify organization secrets are accessible to the calling repository"
             exit 1
           fi
+          
+          if [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
+            echo "❌ TELEGRAM_CHAT_ID is required but not set or empty"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Ensure secrets are defined in the calling repository or organization"
+            echo "  2. Check that secrets are passed in workflow_call:"
+            echo "     secrets:"
+            echo "       bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+            echo "       chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+            echo "  3. Verify organization secrets are accessible to the calling repository"
+            exit 1
+          fi
+          
+          TOKEN_LENGTH=${#TELEGRAM_BOT_TOKEN}
+          echo "✅ TELEGRAM_BOT_TOKEN is set (length: $TOKEN_LENGTH)"
+          echo "✅ TELEGRAM_CHAT_ID is set: $TELEGRAM_CHAT_ID"
+          echo "=== Credentials OK ==="
+          echo ""
 
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           CREATED_DATE="$CURRENT_TIME"
@@ -288,10 +353,38 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "❌ Telegram credentials are required but not set."
+          echo "=== Checking Telegram Credentials ==="
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ]; then
+            echo "❌ TELEGRAM_BOT_TOKEN is required but not set or empty"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Ensure secrets are defined in the calling repository or organization"
+            echo "  2. Check that secrets are passed in workflow_call:"
+            echo "     secrets:"
+            echo "       bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+            echo "       chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+            echo "  3. Verify organization secrets are accessible to the calling repository"
             exit 1
           fi
+          
+          if [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
+            echo "❌ TELEGRAM_CHAT_ID is required but not set or empty"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Ensure secrets are defined in the calling repository or organization"
+            echo "  2. Check that secrets are passed in workflow_call:"
+            echo "     secrets:"
+            echo "       bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+            echo "       chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+            echo "  3. Verify organization secrets are accessible to the calling repository"
+            exit 1
+          fi
+          
+          TOKEN_LENGTH=${#TELEGRAM_BOT_TOKEN}
+          echo "✅ TELEGRAM_BOT_TOKEN is set (length: $TOKEN_LENGTH)"
+          echo "✅ TELEGRAM_CHAT_ID is set: $TELEGRAM_CHAT_ID"
+          echo "=== Credentials OK ==="
+          echo ""
 
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           CREATED_DATE="$CURRENT_TIME"
