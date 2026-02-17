@@ -207,14 +207,14 @@ jobs:
             fi
 
             CONVERTER_BIN=""
-            if [ -f "vendor/bin/date-converter.sh" ]; then
-              CONVERTER_BIN="vendor/bin/date-converter.sh"
-            elif [ -f "vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
-              CONVERTER_BIN="vendor/jobmetric/multi-calendar/bin/date-converter.sh"
-            elif [ -f "vendor/bin/date-converter" ]; then
-              CONVERTER_BIN="vendor/bin/date-converter"
-            else
-              CONVERTER_BIN=$(find vendor -name "date-converter.sh" -type f | head -n 1)
+            if [ -f "$APP_DIR/vendor/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="$APP_DIR/vendor/bin/date-converter.sh"
+            elif [ -f "$APP_DIR/vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="$APP_DIR/vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+            elif [ -f "$APP_DIR/vendor/bin/date-converter" ]; then
+              CONVERTER_BIN="$APP_DIR/vendor/bin/date-converter"
+            elif [ -d "$APP_DIR/vendor" ]; then
+              CONVERTER_BIN=$(find "$APP_DIR/vendor" -name "date-converter.sh" -type f | head -n 1)
             fi
 
             if [ -n "$CONVERTER_BIN" ]; then
@@ -315,14 +315,14 @@ jobs:
             fi
 
             CONVERTER_BIN=""
-            if [ -f "vendor/bin/date-converter.sh" ]; then
-              CONVERTER_BIN="vendor/bin/date-converter.sh"
-            elif [ -f "vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
-              CONVERTER_BIN="vendor/jobmetric/multi-calendar/bin/date-converter.sh"
-            elif [ -f "vendor/bin/date-converter" ]; then
-              CONVERTER_BIN="vendor/bin/date-converter"
-            else
-              CONVERTER_BIN=$(find vendor -name "date-converter.sh" -type f | head -n 1)
+            if [ -f "$APP_DIR/vendor/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="$APP_DIR/vendor/bin/date-converter.sh"
+            elif [ -f "$APP_DIR/vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="$APP_DIR/vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+            elif [ -f "$APP_DIR/vendor/bin/date-converter" ]; then
+              CONVERTER_BIN="$APP_DIR/vendor/bin/date-converter"
+            elif [ -d "$APP_DIR/vendor" ]; then
+              CONVERTER_BIN=$(find "$APP_DIR/vendor" -name "date-converter.sh" -type f | head -n 1)
             fi
 
             if [ -n "$CONVERTER_BIN" ]; then
