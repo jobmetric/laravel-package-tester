@@ -53,6 +53,17 @@ jobs:
       TARGET_PACKAGE_VERSION: "@dev"
       COMPOSER_AUDIT: false
     steps:
+      - name: Debug workflow start
+        run: |
+          echo "=== Workflow Started ==="
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Secrets bot_token exists: ${{ secrets.bot_token != '' }}"
+          echo "Secrets chat_id exists: ${{ secrets.chat_id != '' }}"
+          echo "=== End Debug ==="
+
       - name: Checkout PR package repository
         uses: actions/checkout@v4
         with:
