@@ -34,10 +34,10 @@ on:
     secrets:
       bot_token:
         description: "Telegram bot token created via BotFather"
-        required: true
+        required: false
       chat_id:
         description: "Target Telegram chat ID (user, group, or channel)"
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -55,6 +55,19 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.bot_token }}
       TELEGRAM_CHAT_ID: ${{ secrets.chat_id }}
     steps:
+      - name: Validate Telegram secrets
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
+            echo "❌ Telegram secrets are required but not set!"
+            echo ""
+            echo "Please ensure secrets are passed in the calling workflow:"
+            echo "  secrets:"
+            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+            exit 1
+          fi
+          echo "✅ Telegram secrets are properly configured"
+
       - name: Checkout PR package repository
         uses: actions/checkout@v4
         with:
