@@ -176,6 +176,19 @@ jobs:
             echo "script_path=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Validate Telegram secrets
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ] || [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
+            echo "❌ Telegram secrets are required but not set!"
+            echo ""
+            echo "Please ensure secrets are passed in the calling workflow:"
+            echo "  secrets:"
+            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
+            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
+            exit 1
+          fi
+          echo "✅ Telegram secrets are properly configured"
+
       - name: Debug Telegram secrets
         if: always()
         env:
@@ -250,102 +263,59 @@ jobs:
           DATE_FORMAT: ${{ inputs.date_format }}
           CALENDAR_TYPE: ${{ inputs.calendar_type }}
           TIMEZONE: ${{ inputs.timezone }}
+        shell: bash
         run: |
-          set -euo pipefail
-
-          echo "=== Checking Telegram Credentials ==="
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ]; then
-            echo "❌ TELEGRAM_BOT_TOKEN is required but not set or empty"
-            echo ""
-            echo "🔧 SOLUTION:"
-            echo ""
-            echo "Option 1 - Fix Organization Secrets Access (Recommended):"
-            echo "  1. Go to: https://github.com/organizations/jobmetric/settings/secrets/actions"
-            echo "  2. Find secrets: TELEGRAM_NOTIFICATION_BOT_TOKEN and TELEGRAM_NOTIFICATION_CHAT_ID"
-            echo "  3. Click on each secret → 'Repository access' → Select 'All repositories'"
-            echo "  4. OR add 'laravel-env-modifier' repository to the allowed list"
-            echo ""
-            echo "Option 2 - Add Secrets to Repository Level:"
-            echo "  1. Go to: https://github.com/jobmetric/laravel-env-modifier/settings/secrets/actions"
-            echo "  2. Add: TELEGRAM_NOTIFICATION_BOT_TOKEN (value from organization)"
-            echo "  3. Add: TELEGRAM_NOTIFICATION_CHAT_ID (value from organization)"
-            echo ""
-            echo "Option 3 - Verify Calling Workflow:"
-            echo "  Ensure your calling workflow has:"
-            echo "  secrets:"
-            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
-            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
-            exit 1
+          # Skip if credentials not set
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram credentials not set. Skipping notification."
+            exit 0
           fi
-          
-          if [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
-            echo "❌ TELEGRAM_CHAT_ID is required but not set or empty"
-            echo ""
-            echo "🔧 SOLUTION:"
-            echo ""
-            echo "Option 1 - Fix Organization Secrets Access (Recommended):"
-            echo "  1. Go to: https://github.com/organizations/jobmetric/settings/secrets/actions"
-            echo "  2. Find secrets: TELEGRAM_NOTIFICATION_BOT_TOKEN and TELEGRAM_NOTIFICATION_CHAT_ID"
-            echo "  3. Click on each secret → 'Repository access' → Select 'All repositories'"
-            echo "  4. OR add 'laravel-env-modifier' repository to the allowed list"
-            echo ""
-            echo "Option 2 - Add Secrets to Repository Level:"
-            echo "  1. Go to: https://github.com/jobmetric/laravel-env-modifier/settings/secrets/actions"
-            echo "  2. Add: TELEGRAM_NOTIFICATION_BOT_TOKEN (value from organization)"
-            echo "  3. Add: TELEGRAM_NOTIFICATION_CHAT_ID (value from organization)"
-            echo ""
-            echo "Option 3 - Verify Calling Workflow:"
-            echo "  Ensure your calling workflow has:"
-            echo "  secrets:"
-            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
-            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
-            exit 1
-          fi
-          
-          TOKEN_LENGTH=${#TELEGRAM_BOT_TOKEN}
-          echo "✅ TELEGRAM_BOT_TOKEN is set (length: $TOKEN_LENGTH)"
-          echo "✅ TELEGRAM_CHAT_ID is set: $TELEGRAM_CHAT_ID"
-          echo "=== Credentials OK ==="
-          echo ""
 
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           CREATED_DATE="$CURRENT_TIME"
-          
-          SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
-          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
-            
-            if [ ! -f "$SCRIPT_PATH" ]; then
-              echo "Warning: Script not found at $SCRIPT_PATH, using default date format"
-            else
-              if [ ! -x "$SCRIPT_PATH" ]; then
-                chmod +x "$SCRIPT_PATH"
-              fi
-              
-              TARGET_CAL="${DATE_FORMAT}"
-              if [ "$DATE_FORMAT" == "both" ]; then
-                 TARGET_CAL="${CALENDAR_TYPE:-jalali}"
-              fi
-              
+
+          if [ -n "$DATE_FORMAT" ]; then
+            TARGET_CAL="${DATE_FORMAT}"
+            if [ "$DATE_FORMAT" == "both" ]; then
+              TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+            fi
+
+            TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+            if [ "$TARGET_CAL" != "jalali" ] && [ "$TARGET_CAL" != "persian" ]; then
               TARGET_TIMEZONE="${TIMEZONE:-UTC}"
-              if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
-                TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
-              fi
-              
-              DATE_TO_CONVERT="$CURRENT_TIME"
-              FORMAT_INPUT="Y-m-d\\TH:i:s"
-              
-              CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
-              EXIT_CODE=$?
-              
-              if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-                 if [ "$DATE_FORMAT" == "both" ]; then
-                   CREATED_DATE="${CURRENT_TIME} / ${CONVERTED} ${TARGET_TIMEZONE}"
-                 else
-                   CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
-                 fi
+            fi
+
+            CONVERTER_BIN=""
+            if [ -f "vendor/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="vendor/bin/date-converter.sh"
+            elif [ -f "vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+            elif [ -f "vendor/bin/date-converter" ]; then
+              CONVERTER_BIN="vendor/bin/date-converter"
+            else
+              CONVERTER_BIN=$(find vendor -name "date-converter.sh" -type f | head -n 1)
+            fi
+
+            if [ -n "$CONVERTER_BIN" ]; then
+              DATE_TO_CONVERT="${CURRENT_TIME%Z}"
+              DATE_TO_CONVERT="${DATE_TO_CONVERT%%+*}"
+
+              set +e
+              if [[ "$CONVERTER_BIN" == *.sh ]]; then
+                CONVERTED=$(bash "$CONVERTER_BIN" "$DATE_TO_CONVERT" --date-format gregorian --format-input "Y-m-d\TH:i:s" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --from-timezone UTC --to-timezone "$TARGET_TIMEZONE" 2>&1)
               else
-                echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
-                CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
+                CONVERTED=$(php "$CONVERTER_BIN" "$DATE_TO_CONVERT" --date-format gregorian --format-input "Y-m-d\TH:i:s" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --from-timezone UTC --to-timezone "$TARGET_TIMEZONE" 2>&1)
+              fi
+              EXIT_CODE=$?
+              set -e
+
+              if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ "exec" ]] && [[ ! "$CONVERTED" =~ "Error" ]]; then
+                CLEAN_DATE=$(echo "$CONVERTED" | tail -n1)
+                if [ "$DATE_FORMAT" == "both" ]; then
+                  CREATED_DATE="${CURRENT_TIME} / ${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                else
+                  CREATED_DATE="${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                fi
               fi
             fi
           elif [ -n "$CURRENT_TIME" ]; then
@@ -364,9 +334,11 @@ jobs:
           MESSAGE="${MESSAGE}Repository: <b><code>${REPOSITORY}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Package: <b><code>${PACKAGE_NAME}</code></b>"$'\n'
           MESSAGE="${MESSAGE}${context_line}"$'\n'
-          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE:-N/A}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${RUN_URL}\">View Run on GitHub</a>"
 
+          # Send message to Telegram and capture response
+          echo "Sending notification to Telegram..."
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
@@ -378,6 +350,7 @@ jobs:
 
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Telegram notification sent successfully"
+            echo "Response: $BODY"
           else
             echo "❌ Failed to send Telegram notification"
             echo "HTTP Code: $HTTP_CODE"
@@ -398,98 +371,60 @@ jobs:
           DATE_FORMAT: ${{ inputs.date_format }}
           CALENDAR_TYPE: ${{ inputs.calendar_type }}
           TIMEZONE: ${{ inputs.timezone }}
+        shell: bash
         run: |
-          set -euo pipefail
-
-          echo "=== Checking Telegram Credentials ==="
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ "$TELEGRAM_BOT_TOKEN" = "null" ]; then
-            echo "❌ TELEGRAM_BOT_TOKEN is required but not set or empty"
-            echo ""
-            echo "🔧 SOLUTION:"
-            echo ""
-            echo "Option 1 - Fix Organization Secrets Access (Recommended):"
-            echo "  1. Go to: https://github.com/organizations/jobmetric/settings/secrets/actions"
-            echo "  2. Find secrets: TELEGRAM_NOTIFICATION_BOT_TOKEN and TELEGRAM_NOTIFICATION_CHAT_ID"
-            echo "  3. Click on each secret → 'Repository access' → Select 'All repositories'"
-            echo "  4. OR add 'laravel-env-modifier' repository to the allowed list"
-            echo ""
-            echo "Option 2 - Add Secrets to Repository Level:"
-            echo "  1. Go to: https://github.com/jobmetric/laravel-env-modifier/settings/secrets/actions"
-            echo "  2. Add: TELEGRAM_NOTIFICATION_BOT_TOKEN (value from organization)"
-            echo "  3. Add: TELEGRAM_NOTIFICATION_CHAT_ID (value from organization)"
-            echo ""
-            echo "Option 3 - Verify Calling Workflow:"
-            echo "  Ensure your calling workflow has:"
-            echo "  secrets:"
-            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
-            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
-            exit 1
+          # Skip if credentials not set
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram credentials not set. Skipping notification."
+            exit 0
           fi
-          
-          if [ -z "$TELEGRAM_CHAT_ID" ] || [ "$TELEGRAM_CHAT_ID" = "null" ]; then
-            echo "❌ TELEGRAM_CHAT_ID is required but not set or empty"
-            echo ""
-            echo "🔧 SOLUTION:"
-            echo ""
-            echo "Option 1 - Fix Organization Secrets Access (Recommended):"
-            echo "  1. Go to: https://github.com/organizations/jobmetric/settings/secrets/actions"
-            echo "  2. Find secrets: TELEGRAM_NOTIFICATION_BOT_TOKEN and TELEGRAM_NOTIFICATION_CHAT_ID"
-            echo "  3. Click on each secret → 'Repository access' → Select 'All repositories'"
-            echo "  4. OR add 'laravel-env-modifier' repository to the allowed list"
-            echo ""
-            echo "Option 2 - Add Secrets to Repository Level:"
-            echo "  1. Go to: https://github.com/jobmetric/laravel-env-modifier/settings/secrets/actions"
-            echo "  2. Add: TELEGRAM_NOTIFICATION_BOT_TOKEN (value from organization)"
-            echo "  3. Add: TELEGRAM_NOTIFICATION_CHAT_ID (value from organization)"
-            echo ""
-            echo "Option 3 - Verify Calling Workflow:"
-            echo "  Ensure your calling workflow has:"
-            echo "  secrets:"
-            echo "    bot_token: \${{ secrets.TELEGRAM_NOTIFICATION_BOT_TOKEN }}"
-            echo "    chat_id: \${{ secrets.TELEGRAM_NOTIFICATION_CHAT_ID }}"
-            exit 1
-          fi
-          
-          TOKEN_LENGTH=${#TELEGRAM_BOT_TOKEN}
-          echo "✅ TELEGRAM_BOT_TOKEN is set (length: $TOKEN_LENGTH)"
-          echo "✅ TELEGRAM_CHAT_ID is set: $TELEGRAM_CHAT_ID"
-          echo "=== Credentials OK ==="
-          echo ""
 
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           CREATED_DATE="$CURRENT_TIME"
-          
-          SCRIPT_PATH="${{ steps.find_script.outputs.script_path || '' }}"
-          if [ -n "$DATE_FORMAT" ] && [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
-            if [ ! -x "$SCRIPT_PATH" ]; then
-              chmod +x "$SCRIPT_PATH"
-            fi
-            
+
+          if [ -n "$DATE_FORMAT" ]; then
             TARGET_CAL="${DATE_FORMAT}"
             if [ "$DATE_FORMAT" == "both" ]; then
-               TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+              TARGET_CAL="${CALENDAR_TYPE:-jalali}"
             fi
-            
-            TARGET_TIMEZONE="${TIMEZONE:-UTC}"
-            if [ "$TARGET_CAL" == "jalali" ] || [ "$TARGET_CAL" == "persian" ]; then
-              TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+
+            TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+            if [ "$TARGET_CAL" != "jalali" ] && [ "$TARGET_CAL" != "persian" ]; then
+              TARGET_TIMEZONE="${TIMEZONE:-UTC}"
             fi
-            
-            DATE_TO_CONVERT="$CURRENT_TIME"
-            FORMAT_INPUT="Y-m-d\\TH:i:s"
-            
-            CONVERTED=$("$SCRIPT_PATH" "$DATE_TO_CONVERT" --date-format gregorian --format-input "$FORMAT_INPUT" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --timezone "$TARGET_TIMEZONE" 2>&1)
-            EXIT_CODE=$?
-            
-            if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ ^Error ]]; then
-               if [ "$DATE_FORMAT" == "both" ]; then
-                 CREATED_DATE="${CURRENT_TIME} / ${CONVERTED} ${TARGET_TIMEZONE}"
-               else
-                 CREATED_DATE="${CONVERTED} ${TARGET_TIMEZONE}"
-               fi
+
+            CONVERTER_BIN=""
+            if [ -f "vendor/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="vendor/bin/date-converter.sh"
+            elif [ -f "vendor/jobmetric/multi-calendar/bin/date-converter.sh" ]; then
+              CONVERTER_BIN="vendor/jobmetric/multi-calendar/bin/date-converter.sh"
+            elif [ -f "vendor/bin/date-converter" ]; then
+              CONVERTER_BIN="vendor/bin/date-converter"
             else
-              echo "Warning: Date conversion failed. Using original date. Error: $CONVERTED"
-              CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
+              CONVERTER_BIN=$(find vendor -name "date-converter.sh" -type f | head -n 1)
+            fi
+
+            if [ -n "$CONVERTER_BIN" ]; then
+              DATE_TO_CONVERT="${CURRENT_TIME%Z}"
+              DATE_TO_CONVERT="${DATE_TO_CONVERT%%+*}"
+
+              set +e
+              if [[ "$CONVERTER_BIN" == *.sh ]]; then
+                CONVERTED=$(bash "$CONVERTER_BIN" "$DATE_TO_CONVERT" --date-format gregorian --format-input "Y-m-d\TH:i:s" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --from-timezone UTC --to-timezone "$TARGET_TIMEZONE" 2>&1)
+              else
+                CONVERTED=$(php "$CONVERTER_BIN" "$DATE_TO_CONVERT" --date-format gregorian --format-input "Y-m-d\TH:i:s" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --from-timezone UTC --to-timezone "$TARGET_TIMEZONE" 2>&1)
+              fi
+              EXIT_CODE=$?
+              set -e
+
+              if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ] && [[ ! "$CONVERTED" =~ "exec" ]] && [[ ! "$CONVERTED" =~ "Error" ]]; then
+                CLEAN_DATE=$(echo "$CONVERTED" | tail -n1)
+                if [ "$DATE_FORMAT" == "both" ]; then
+                  CREATED_DATE="${CURRENT_TIME} / ${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                else
+                  CREATED_DATE="${CLEAN_DATE} (${TARGET_TIMEZONE})"
+                fi
+              fi
             fi
           elif [ -n "$CURRENT_TIME" ]; then
             CREATED_DATE=$(date -d "$CURRENT_TIME" "+%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "$CURRENT_TIME")
@@ -507,9 +442,11 @@ jobs:
           MESSAGE="${MESSAGE}Repository: <b><code>${REPOSITORY}</code></b>"$'\n'
           MESSAGE="${MESSAGE}Package: <b><code>${PACKAGE_NAME}</code></b>"$'\n'
           MESSAGE="${MESSAGE}${context_line}"$'\n'
-          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE}</b>"$'\n\n'
+          MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE:-N/A}</b>"$'\n\n'
           MESSAGE="${MESSAGE}<a href=\"${RUN_URL}\">View Run on GitHub</a>"
 
+          # Send message to Telegram and capture response
+          echo "Sending notification to Telegram..."
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
             -d chat_id="$TELEGRAM_CHAT_ID" \
             --data-urlencode "text=$MESSAGE" \
@@ -521,6 +458,7 @@ jobs:
 
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Telegram notification sent successfully"
+            echo "Response: $BODY"
           else
             echo "❌ Failed to send Telegram notification"
             echo "HTTP Code: $HTTP_CODE"
