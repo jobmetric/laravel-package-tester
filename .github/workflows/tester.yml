@@ -71,7 +71,7 @@ on:
 
 jobs:
   test:
-    uses: ./.github/workflows/strategies/v1.yml@master
+    uses: ./.github/workflows/strategies/v1.yml
     with:
       php_version: ${{ inputs.php_version }}
       laravel_version: ${{ inputs.laravel_version }}
