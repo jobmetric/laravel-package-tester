@@ -41,7 +41,7 @@ on:
 
 jobs:
   test:
-    uses: ./.github/workflows/strategies/v1.yml
+    uses: jobmetric/laravel-package-tester/.github/workflows/strategies/v1.yml@master
     with:
       php_version: ${{ inputs.php_version }}
       laravel_version: ${{ inputs.laravel_version }}
