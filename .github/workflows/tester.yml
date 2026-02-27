@@ -38,10 +38,40 @@ on:
       chat_id:
         description: "Target Telegram chat ID (user, group, or channel)"
         required: true
+  workflow_dispatch:
+    inputs:
+      php_version:
+        description: PHP version.
+        required: false
+        default: "8.2"
+        type: string
+      laravel_version:
+        description: Laravel version for sandbox app.
+        required: false
+        default: "^9.0|^10.0|^11.0"
+        type: string
+      date_format:
+        description: "Date format"
+        required: false
+        type: string
+      calendar_type:
+        description: "Calendar type"
+        required: false
+        type: string
+        default: "jalali"
+      timezone:
+        description: "Timezone"
+        required: false
+        type: string
+        default: "UTC"
+      package_name:
+        description: "Package name to test (e.g., jobmetric/laravel-env-modifier)"
+        required: true
+        type: string
 
 jobs:
   test:
-    uses: jobmetric/laravel-package-tester/.github/workflows/strategies/v1.yml@master
+    uses: ./.github/workflows/strategies/v1.yml@master
     with:
       php_version: ${{ inputs.php_version }}
       laravel_version: ${{ inputs.laravel_version }}
