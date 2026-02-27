@@ -1,0 +1,307 @@
+name: Tester v1
+
+on:
+  workflow_call:
+    inputs:
+      php_version:
+        description: PHP version.
+        required: false
+        default: "8.2"
+        type: string
+      laravel_version:
+        description: Laravel version for sandbox app.
+        required: false
+        default: "^9.0|^10.0|^11.0"
+        type: string
+      date_format:
+        description: "Date format"
+        required: false
+        type: string
+      calendar_type:
+        description: "Calendar type"
+        required: false
+        type: string
+        default: "jalali"
+      timezone:
+        description: "Timezone"
+        required: false
+        type: string
+        default: "UTC"
+      package_name:
+        description: "Package name to test (e.g., jobmetric/laravel-env-modifier). If not provided, will be read from composer.json"
+        required: true
+        type: string
+    secrets:
+      bot_token:
+        description: "Telegram bot token created via BotFather"
+        required: true
+      chat_id:
+        description: "Target Telegram chat ID (user, group, or channel)"
+        required: true
+
+jobs:
+  tests:
+    name: PR Package Test (PHP ${{ inputs.php_version }})
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: .ci/laravel-app
+      PACKAGE_DIR: package-under-test
+      TESTER_PACKAGE: jobmetric/laravel-package-tester
+      TARGET_PACKAGE_VERSION: "@dev"
+      COMPOSER_AUDIT: false
+    steps:
+      - name: 🟡 Starting
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [░░░░░░░░░░] 0% - Starting tests...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: 🔵 Checkout
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [█░░░░░░░░░] 10% - Checking out repository...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: Checkout PR package repository
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.PACKAGE_DIR }}
+
+      - name: 🟢 Setup PHP
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [██░░░░░░░░] 20% - Setting up PHP environment...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php_version: ${{ inputs.php_version }}
+          tools: composer:v2
+          coverage: none
+          extensions: ${{ inputs.date_format != '' && inputs.date_format != null && 'intl' || '' }}
+
+      - name: 🔵 Creating Sandbox
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [███░░░░░░░] 30% - Creating Laravel sandbox...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: Create sandbox and install packages
+        env:
+          COMPOSER_AUDIT: false
+        run: |
+          set -euo pipefail
+
+          composer config --global audit.block-insecure false
+          rm -rf "$APP_DIR"
+          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel_version }}" --no-interaction --prefer-dist
+          cd "$APP_DIR"
+
+          composer config --no-interaction minimum-stability dev
+          composer config --no-interaction prefer-stable true
+          composer config --no-interaction allow-plugins.jobmetric/package-tester-composer-plugin true
+          composer config --no-interaction audit.block-insecure false
+          
+          composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false}}"
+          
+          # Determine orchestra/testbench version based on Laravel version
+          LARAVEL_VERSION="${{ inputs.laravel_version }}"
+
+          # Extract major version number (e.g., "9" from "^9.0" or "10" from "^10.0")
+          LARAVEL_MAJOR=$(echo "$LARAVEL_VERSION" | grep -oE '[0-9]+' | head -1)
+          
+          if [ -z "$LARAVEL_MAJOR" ]; then
+            LARAVEL_MAJOR=9
+          fi
+          
+          if [ "$LARAVEL_MAJOR" -ge 12 ]; then
+            TESTBENCH_VERSION="^10.0"
+          elif [ "$LARAVEL_MAJOR" -ge 11 ]; then
+            TESTBENCH_VERSION="^9.0"
+          elif [ "$LARAVEL_MAJOR" -ge 10 ]; then
+            TESTBENCH_VERSION="^8.0"
+          else
+            # Default to ^7.0 for Laravel 9 and below
+            TESTBENCH_VERSION="^7.0"
+          fi
+          
+          # Install orchestra/testbench first to ensure it's available for package tests
+          composer require --dev --no-interaction --no-update "orchestra/testbench:${TESTBENCH_VERSION}" || echo "Warning: Could not add orchestra/testbench, continuing..."
+          
+          if [ "${{ inputs.package_name }}" != "jobmetric/laravel-package-tester" ]; then
+            composer require --no-interaction --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
+          fi
+          
+          # Install multi-calendar package if date_format is provided (for date conversion script)
+          if [ -n "${{ inputs.date_format }}" ] && [ "${{ inputs.date_format }}" != "" ]; then
+            composer require --no-interaction --no-update "jobmetric/multi-calendar" || echo "Warning: Could not add multi-calendar package, continuing..."
+          fi
+
+          # Install the package under test
+          composer require --dev --no-interaction -w "${{ inputs.package_name }}:@dev"
+
+          composer update --no-interaction --prefer-dist --with-all-dependencies
+          composer dump-autoload --no-interaction -o
+
+      - name: 🟡 Installing Packages
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [████░░░░░░] 40% - Installing packages...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: 🟣 Preparing Laravel
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [█████░░░░░] 50% - Preparing Laravel application...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: Prepare Laravel application
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
+          fi
+
+          php artisan key:generate --force
+
+      - name: 🟣 Testing
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [██████░░░░] 60% - Running tests...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: Run package tests with laravel-package-tester
+        id: package_tests
+        continue-on-error: true
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          set -euo pipefail
+
+          php artisan test-run "${{ inputs.package_name }}" --detailed
+
+      - name: 🟤 Analyzing Results
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [████████░░] 80% - Analyzing test results...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: 🟡 Finalizing
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Progress
+            
+            [█████████░] 90% - Finalizing...
+            
+            **Package:** `${{ inputs.package_name || 'Auto-detected' }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+
+      - name: ✅ Final Result
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: package-tests
+          message: |
+            ## 🧪 Package Test Results
+            
+            [██████████] 100% - Done!
+            
+            **Package:** `${{ inputs.package_name }}`
+            **PHP Version:** `${{ inputs.php_version }}`
+            **Laravel Version:** `${{ inputs.laravel_version }}`
+            
+            ### ${{ steps.package_tests.outcome == 'success' && '✅ All Tests Passed!' || '❌ Tests Failed!' }}
+            
+            **Run URL:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+      - name: Notify Telegram
+        if: always()
+        uses: jobmetric/github-notify/.github/actions/action.yml@master
+        with:
+          bot_token: ${{ secrets.bot_token }}
+          chat_id: ${{ secrets.chat_id }}
+          test_outcome: ${{ steps.package_tests.outcome }}
+          package_name: ${{ inputs.package_name }}
+          repository: ${{ github.repository }}
+          run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          event_name: ${{ github.event_name }}
+          pr_number: ${{ github.event.pull_request.number }}
+          date_format: ${{ inputs.date_format }}
+          calendar_type: ${{ inputs.calendar_type }}
+          timezone: ${{ inputs.timezone }}
+          app_dir: ${{ env.APP_DIR }}
+
+      - name: Fail workflow if tests failed
+        if: ${{ steps.package_tests.outcome == 'failure' }}
+        run: exit 1
+
