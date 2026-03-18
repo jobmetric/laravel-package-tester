@@ -119,7 +119,6 @@ jobs:
           composer update --no-interaction --prefer-dist -W
           
           composer dump-autoload --no-interaction -o
-          php artisan package:discover --ansi
 
       - name: Prepare Laravel application
         working-directory: ${{ env.APP_DIR }}
@@ -134,10 +133,7 @@ jobs:
           fi
 
           php artisan key:generate --force
-          
           php artisan package:discover --ansi
-          
-          composer dump-autoload --no-interaction -o || true
 
       - name: 🟣 Testing
         uses: marocchino/sticky-pull-request-comment@v2
@@ -155,12 +151,6 @@ jobs:
         run: |
           set -euo pipefail
           
-          # Clear cache and rediscover packages
-          php artisan config:clear || true
-          php artisan cache:clear || true
-          php artisan package:discover --ansi
-          
-          # Verify command exists and try different command names
           if php artisan list | grep -q "test-run"; then
             php artisan test-run "${{ inputs.package_name }}" --detailed
           elif php artisan list | grep -q "package-tester:test-run"; then
@@ -168,10 +158,8 @@ jobs:
           elif php artisan list | grep -q "package-tester:run"; then
             php artisan package-tester:run "${{ inputs.package_name }}" --detailed
           else
-            echo "ERROR: Command test-run not found. Available commands:"
+            echo "ERROR: Command test-run not found"
             php artisan list | grep -i test || true
-            echo "ERROR: Package tester command not registered. Checking package installation..."
-            composer show jobmetric/laravel-package-tester || echo "Package not installed"
             exit 1
           fi
 
@@ -190,7 +178,7 @@ jobs:
 
       - name: Notify Telegram
         if: always()
-        uses: jobmetric/laravel-package-tester/.github/actions/telegram-notify@master
+        uses: jobmetric/github-notify/.github/actions
         with:
           bot_token: ${{ secrets.bot_token }}
           chat_id: ${{ secrets.chat_id }}
