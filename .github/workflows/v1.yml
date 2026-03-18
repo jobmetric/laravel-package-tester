@@ -118,13 +118,10 @@ jobs:
           fi
 
           composer require --dev --no-interaction "${{ inputs.package_name }}:@dev" --no-update
-          
-          # Override laravel-package-core constraint to allow dev-master
-          # This resolves the conflict between laravel-package-tester requiring 1.35 and dev-master
-          composer require --no-interaction "jobmetric/laravel-package-core:dev-master" --no-update || echo "Warning: Could not override core package constraint, continuing..."
 
-          # Update with --with-all-dependencies to allow version conflicts resolution
-          composer update --no-interaction --prefer-dist --with-all-dependencies || composer update --no-interaction --prefer-dist --with-all-dependencies --ignore-platform-reqs || echo "Warning: Composer update failed, continuing..."
+          # Update with --with-dependencies to match previous working version
+          # This allows composer to resolve dependencies correctly without forcing all root dependencies
+          composer update --no-interaction --prefer-dist --with-dependencies "${{ inputs.package_name }}" || echo "Warning: Composer update failed, continuing..."
           composer dump-autoload --no-interaction -o
 
       - name: Prepare Laravel application
@@ -137,6 +134,9 @@ jobs:
           fi
 
           php artisan key:generate --force
+          
+          # Discover packages to register commands
+          php artisan package:discover --ansi
 
       - name: 🟣 Testing
         uses: marocchino/sticky-pull-request-comment@v2
@@ -153,6 +153,14 @@ jobs:
         working-directory: ${{ env.APP_DIR }}
         run: |
           set -euo pipefail
+          
+          # Ensure package is discovered
+          php artisan package:discover --ansi || true
+          
+          # List available commands for debugging
+          php artisan list | grep -i test || true
+          
+          # Run tests
           php artisan test-run "${{ inputs.package_name }}" --detailed
 
       - name: ✅ Final Result
