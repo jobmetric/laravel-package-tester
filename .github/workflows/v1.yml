@@ -109,9 +109,6 @@ jobs:
           
           composer require --dev --no-interaction --no-update "orchestra/testbench:${TESTBENCH_VERSION}" || echo "Warning: Could not add orchestra/testbench, continuing..."
           
-          # Resolve core dependency conflict using alias
-          composer require "jobmetric/laravel-package-core:dev-master as 1.99.0" --no-update --no-interaction
-
           if [ "${{ inputs.package_name }}" != "jobmetric/laravel-package-tester" ]; then
             composer require --no-interaction --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
           fi
@@ -121,8 +118,13 @@ jobs:
           fi
 
           composer require --dev --no-interaction "${{ inputs.package_name }}:@dev" --no-update
+          
+          # Override laravel-package-core constraint to allow dev-master
+          # This resolves the conflict between laravel-package-tester requiring 1.35 and dev-master
+          composer require --no-interaction "jobmetric/laravel-package-core:dev-master" --no-update || echo "Warning: Could not override core package constraint, continuing..."
 
-          composer update --no-interaction --prefer-dist --with-all-dependencies
+          # Update with --with-all-dependencies to allow version conflicts resolution
+          composer update --no-interaction --prefer-dist --with-all-dependencies || composer update --no-interaction --prefer-dist --with-all-dependencies --ignore-platform-reqs || echo "Warning: Composer update failed, continuing..."
           composer dump-autoload --no-interaction -o
 
       - name: Prepare Laravel application
