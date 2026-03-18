@@ -51,16 +51,6 @@ jobs:
       TESTER_PACKAGE: jobmetric/laravel-package-tester
       COMPOSER_AUDIT: false
     steps:
-      - name: Checkout Repository (Root)
-        uses: actions/checkout@v4
-
-      - name: Checkout tester repository for actions
-        uses: actions/checkout@v4
-        with:
-          repository: jobmetric/ghazal
-          path: .github-actions-source
-          ref: master
-
       - name: 🟡 Starting
         uses: marocchino/sticky-pull-request-comment@v2
         if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
@@ -178,7 +168,7 @@ jobs:
 
       - name: Notify Telegram
         if: always()
-        uses: ./.github/actions/telegram-notify
+        uses: jobmetric/laravel-package-tester/.github/actions/telegram-notify@master
         with:
           bot_token: ${{ secrets.bot_token }}
           chat_id: ${{ secrets.chat_id }}
