@@ -81,48 +81,41 @@ jobs:
           set -euo pipefail
 
           rm -rf "$APP_DIR"
-          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel_version }}" --no-interaction --prefer-dist
+          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel_version }}" --no-interaction --prefer-dist --no-install
           cd "$APP_DIR"
 
           composer config --no-interaction minimum-stability dev
           composer config --no-interaction prefer-stable true
           composer config --no-interaction allow-plugins.jobmetric/package-tester-composer-plugin true
-          
           composer config --json --no-interaction repositories.package_under_test "{\"type\":\"path\",\"url\":\"${GITHUB_WORKSPACE}/${PACKAGE_DIR}\",\"options\":{\"symlink\":false},\"canonical\":false}"
           
-          LARAVEL_VERSION="${{ inputs.laravel_version }}"
-          LARAVEL_MAJOR=$(echo "$LARAVEL_VERSION" | grep -oE '[0-9]+' | head -1)
-          
-          if [ -z "$LARAVEL_MAJOR" ]; then
-            LARAVEL_MAJOR=9
+          LARAVEL_VERSION_REQ=$(grep "laravel/framework" composer.json | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          LARAVEL_MAJOR=$(echo "$LARAVEL_VERSION_REQ" | cut -d. -f1)
+
+          if [ "$LARAVEL_MAJOR" -ge 12 ]; then TESTBENCH_VERSION="^10.0"
+          elif [ "$LARAVEL_MAJOR" -ge 11 ]; then TESTBENCH_VERSION="^9.0"
+          elif [ "$LARAVEL_MAJOR" -ge 10 ]; then TESTBENCH_VERSION="^8.0"
+          else TESTBENCH_VERSION="^7.0"
           fi
-          
-          if [ "$LARAVEL_MAJOR" -ge 12 ]; then
-            TESTBENCH_VERSION="^10.0"
-          elif [ "$LARAVEL_MAJOR" -ge 11 ]; then
-            TESTBENCH_VERSION="^9.0"
-          elif [ "$LARAVEL_MAJOR" -ge 10 ]; then
-            TESTBENCH_VERSION="^8.0"
-          else
-            TESTBENCH_VERSION="^7.0"
-          fi
-          
-          composer require --dev --no-interaction --no-update "orchestra/testbench:${TESTBENCH_VERSION}" || echo "Warning: Could not add orchestra/testbench, continuing..."
+
+          echo "Detected Laravel Major: $LARAVEL_MAJOR, installing Testbench: $TESTBENCH_VERSION"
+
+          composer require --dev --no-interaction --no-update "orchestra/testbench:${TESTBENCH_VERSION}"
           
           if [ "${{ inputs.package_name }}" != "jobmetric/laravel-package-tester" ]; then
-            composer require --no-interaction --no-update "$TESTER_PACKAGE:dev-master" || echo "Warning: Could not add tester package, continuing..."
+            composer require --no-interaction --no-update "$TESTER_PACKAGE:dev-master"
           fi
           
           if [ -n "${{ inputs.date_format }}" ] && [ "${{ inputs.date_format }}" != "" ]; then
-            composer require --no-interaction --no-update "jobmetric/multi-calendar" || echo "Warning: Could not add multi-calendar package, continuing..."
+            composer require --no-interaction --no-update "jobmetric/multi-calendar"
           fi
 
-          composer require --dev --no-interaction "${{ inputs.package_name }}:@dev" --no-update
+          composer require --dev --no-interaction --no-update "${{ inputs.package_name }}:@dev"
 
-          # Update with --with-dependencies to match previous working version
-          # This allows composer to resolve dependencies correctly without forcing all root dependencies
-          composer update --no-interaction --prefer-dist --with-dependencies "${{ inputs.package_name }}" || echo "Warning: Composer update failed, continuing..."
+          composer update --no-interaction --prefer-dist -W
+          
           composer dump-autoload --no-interaction -o
+          php artisan package:discover --ansi
 
       - name: Prepare Laravel application
         working-directory: ${{ env.APP_DIR }}
@@ -137,6 +130,9 @@ jobs:
           
           # Discover packages to register commands
           php artisan package:discover --ansi
+          
+          # Ensure autoload is up to date after package discovery
+          composer dump-autoload --no-interaction -o || true
 
       - name: 🟣 Testing
         uses: marocchino/sticky-pull-request-comment@v2
@@ -154,14 +150,25 @@ jobs:
         run: |
           set -euo pipefail
           
-          # Ensure package is discovered
-          php artisan package:discover --ansi || true
+          # Clear cache and rediscover packages
+          php artisan config:clear || true
+          php artisan cache:clear || true
+          php artisan package:discover --ansi
           
-          # List available commands for debugging
-          php artisan list | grep -i test || true
-          
-          # Run tests
-          php artisan test-run "${{ inputs.package_name }}" --detailed
+          # Verify command exists and try different command names
+          if php artisan list | grep -q "test-run"; then
+            php artisan test-run "${{ inputs.package_name }}" --detailed
+          elif php artisan list | grep -q "package-tester:test-run"; then
+            php artisan package-tester:test-run "${{ inputs.package_name }}" --detailed
+          elif php artisan list | grep -q "package-tester:run"; then
+            php artisan package-tester:run "${{ inputs.package_name }}" --detailed
+          else
+            echo "ERROR: Command test-run not found. Available commands:"
+            php artisan list | grep -i test || true
+            echo "ERROR: Package tester command not registered. Checking package installation..."
+            composer show jobmetric/laravel-package-tester || echo "Package not installed"
+            exit 1
+          fi
 
       - name: ✅ Final Result
         if: always() && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
