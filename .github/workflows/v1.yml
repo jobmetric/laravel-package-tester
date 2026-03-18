@@ -43,6 +43,10 @@ jobs:
   tests:
     name: PR Package Test (PHP ${{ inputs.php_version }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     env:
       APP_DIR: .ci/laravel-app
       PACKAGE_DIR: package-under-test
@@ -50,6 +54,13 @@ jobs:
       TARGET_PACKAGE_VERSION: "@dev"
       COMPOSER_AUDIT: false
     steps:
+      - name: Checkout tester repository for actions
+        uses: actions/checkout@v4
+        with:
+          repository: jobmetric/ghazal
+          path: .github-actions-source
+          ref: master
+
       - name: 🟡 Starting
         uses: marocchino/sticky-pull-request-comment@v2
         if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
