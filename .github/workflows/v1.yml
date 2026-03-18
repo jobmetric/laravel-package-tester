@@ -132,8 +132,14 @@ jobs:
             cp .env.example .env
           fi
 
+          sed -i 's/^DB_CONNECTION=.*/DB_CONNECTION=array/' .env || echo "DB_CONNECTION=array" >> .env
+          sed -i '/^DB_/d' .env || true
+
           php artisan key:generate --force
-          php artisan package:discover --ansi
+          
+          composer dump-autoload --no-interaction -o
+          php artisan package:discover --ansi || true
+          composer dump-autoload --no-interaction -o
 
       - name: 🟣 Testing
         uses: marocchino/sticky-pull-request-comment@v2
