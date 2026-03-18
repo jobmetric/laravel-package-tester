@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
 
           rm -rf "$APP_DIR"
-          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel_version }}" --no-interaction --prefer-dist --no-install
+          composer create-project laravel/laravel "$APP_DIR" "${{ inputs.laravel_version }}" --no-interaction --prefer-dist --no-install --no-scripts
           cd "$APP_DIR"
 
           composer config --no-interaction minimum-stability dev
@@ -92,10 +92,14 @@ jobs:
           LARAVEL_VERSION_REQ=$(grep "laravel/framework" composer.json | grep -oE '[0-9]+\.[0-9]+' | head -1)
           LARAVEL_MAJOR=$(echo "$LARAVEL_VERSION_REQ" | cut -d. -f1)
 
-          if [ "$LARAVEL_MAJOR" -ge 12 ]; then TESTBENCH_VERSION="^10.0"
-          elif [ "$LARAVEL_MAJOR" -ge 11 ]; then TESTBENCH_VERSION="^9.0"
-          elif [ "$LARAVEL_MAJOR" -ge 10 ]; then TESTBENCH_VERSION="^8.0"
-          else TESTBENCH_VERSION="^7.0"
+          if [ "$LARAVEL_MAJOR" -ge 12 ]; then
+            TESTBENCH_VERSION="^10.0"
+          elif [ "$LARAVEL_MAJOR" -ge 11 ]; then
+            TESTBENCH_VERSION="^9.0"
+          elif [ "$LARAVEL_MAJOR" -ge 10 ]; then
+            TESTBENCH_VERSION="^8.0"
+          else
+            TESTBENCH_VERSION="^7.0"
           fi
 
           echo "Detected Laravel Major: $LARAVEL_MAJOR, installing Testbench: $TESTBENCH_VERSION"
@@ -122,16 +126,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          php artisan config:clear || true
+          php artisan cache:clear || true
+
           if [ ! -f .env ] && [ -f .env.example ]; then
             cp .env.example .env
           fi
 
           php artisan key:generate --force
           
-          # Discover packages to register commands
           php artisan package:discover --ansi
           
-          # Ensure autoload is up to date after package discovery
           composer dump-autoload --no-interaction -o || true
 
       - name: 🟣 Testing
