@@ -116,7 +116,7 @@ jobs:
 
           composer require --dev --no-interaction --no-update "${{ inputs.package_name }}:@dev"
 
-          composer update --no-interaction --prefer-dist -W
+          composer update --no-interaction --prefer-dist -W --no-scripts
           
           composer dump-autoload --no-interaction -o
 
