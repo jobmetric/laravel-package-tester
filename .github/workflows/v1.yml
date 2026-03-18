@@ -118,7 +118,7 @@ jobs:
 
           composer update --no-interaction --prefer-dist -W --no-scripts
           
-          composer dump-autoload --no-interaction -o
+          composer dump-autoload --no-interaction -o --no-scripts
 
       - name: Prepare Laravel application
         working-directory: ${{ env.APP_DIR }}
@@ -137,9 +137,9 @@ jobs:
 
           php artisan key:generate --force
           
-          composer dump-autoload --no-interaction -o
+          composer dump-autoload --no-interaction -o --no-scripts
           php artisan package:discover --ansi || true
-          composer dump-autoload --no-interaction -o
+          composer dump-autoload --no-interaction -o --no-scripts
 
       - name: 🟣 Testing
         uses: marocchino/sticky-pull-request-comment@v2
