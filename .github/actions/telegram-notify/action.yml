@@ -1,0 +1,153 @@
+name: 'Telegram Notification'
+description: 'Send notification to Telegram about package test results'
+
+inputs:
+  bot_token:
+    description: 'Telegram bot token created via BotFather'
+    required: true
+  chat_id:
+    description: 'Target Telegram chat ID (user, group, or channel)'
+    required: true
+  test_outcome:
+    description: 'Test outcome from steps (success, failure, cancelled, etc.)'
+    required: true
+  package_name:
+    description: 'Package name being tested'
+    required: true
+  repository:
+    description: 'GitHub repository name'
+    required: true
+  run_url:
+    description: 'GitHub Actions run URL'
+    required: true
+  event_name:
+    description: 'GitHub event name'
+    required: true
+  pr_number:
+    description: 'Pull request number (if applicable)'
+    required: false
+  date_format:
+    description: 'Date format for conversion'
+    required: false
+  calendar_type:
+    description: 'Calendar type (default: jalali)'
+    required: false
+    default: 'jalali'
+  timezone:
+    description: 'Timezone (default: UTC)'
+    required: false
+    default: 'UTC'
+  app_dir:
+    description: 'Laravel app directory path for finding date converter'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Send Telegram Notification
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Skip if credentials not set
+        if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+          echo "Telegram credentials not set. Skipping notification."
+          exit 0
+        fi
+
+        # Determine status based on test outcome
+        if [ "$TEST_OUTCOME" = "success" ]; then
+          STATUS="success"
+        elif [ "$TEST_OUTCOME" = "failure" ]; then
+          STATUS="failure"
+        else
+          echo "Test outcome is '$TEST_OUTCOME'. Skipping notification."
+          exit 0
+        fi
+
+        # Get current time
+        CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        CREATED_DATE="$CURRENT_TIME"
+
+        # Convert date if date_format is provided
+        if [ -n "${DATE_FORMAT:-}" ]; then
+          TARGET_CAL="${DATE_FORMAT}"
+          [ "$DATE_FORMAT" == "both" ] && TARGET_CAL="${CALENDAR_TYPE:-jalali}"
+
+          TARGET_TIMEZONE="${TIMEZONE:-Asia/Tehran}"
+          [ "$TARGET_CAL" != "jalali" ] && [ "$TARGET_CAL" != "persian" ] && TARGET_TIMEZONE="${TIMEZONE:-UTC}"
+
+          if [ -n "${APP_DIR:-}" ]; then
+            CONVERTER_BIN="$APP_DIR/vendor/bin/date-converter.sh"
+
+            if [ -f "$CONVERTER_BIN" ]; then
+              DATE_TO_CONVERT="${CURRENT_TIME%Z}"
+              DATE_TO_CONVERT="${DATE_TO_CONVERT%%+*}"
+
+              set +e
+              CONVERTED=$(bash "$CONVERTER_BIN" "$DATE_TO_CONVERT" --date-format gregorian --format-input "Y-m-d\TH:i:s" --to "$TARGET_CAL" --format-output "Y-m-d H:i:s" --from-timezone UTC --to-timezone "$TARGET_TIMEZONE" 2>&1)
+              EXIT_CODE=$?
+              set -e
+
+              if [ $EXIT_CODE -eq 0 ] && [ -n "$CONVERTED" ]; then
+                CLEAN_DATE=$(echo "$CONVERTED" | tail -n1)
+                [ "$DATE_FORMAT" == "both" ] && CREATED_DATE="${CURRENT_TIME} / ${CLEAN_DATE} (${TARGET_TIMEZONE})" || CREATED_DATE="${CLEAN_DATE} (${TARGET_TIMEZONE})"
+              fi
+            fi
+          fi
+        fi
+
+        # Build context line
+        if [ "$EVENT_NAME" = "pull_request" ] && [ -n "${PR_NUMBER:-}" ]; then
+          context_line="PR #${PR_NUMBER}"
+        else
+          context_line="Event: ${EVENT_NAME}"
+        fi
+
+        # Build message
+        if [ "$STATUS" = "success" ]; then
+          MESSAGE="✅ Package tests passed"$'\n'
+        else
+          MESSAGE="❌ Package tests failed"$'\n'
+        fi
+
+        MESSAGE="${MESSAGE}Repository: <b><code>${REPOSITORY}</code></b>"$'\n'
+        MESSAGE="${MESSAGE}Package: <b><code>${PACKAGE_NAME}</code></b>"$'\n'
+        MESSAGE="${MESSAGE}${context_line}"$'\n'
+        MESSAGE="${MESSAGE}Time: <b>${CREATED_DATE:-N/A}</b>"$'\n\n'
+        MESSAGE="${MESSAGE}<a href=\"${RUN_URL}\">View Run on GitHub</a>"
+
+        # Send message to Telegram
+        echo "Sending notification to Telegram..."
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id="$TELEGRAM_CHAT_ID" \
+          --data-urlencode "text=$MESSAGE" \
+          -d parse_mode="HTML" \
+          -d disable_web_page_preview=true)
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Telegram notification sent successfully"
+        else
+          echo "❌ Failed to send Telegram notification"
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response: $BODY"
+          exit 1
+        fi
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.bot_token }}
+        TELEGRAM_CHAT_ID: ${{ inputs.chat_id }}
+        TEST_OUTCOME: ${{ inputs.test_outcome }}
+        PACKAGE_NAME: ${{ inputs.package_name }}
+        REPOSITORY: ${{ inputs.repository }}
+        RUN_URL: ${{ inputs.run_url }}
+        EVENT_NAME: ${{ inputs.event_name }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        DATE_FORMAT: ${{ inputs.date_format }}
+        CALENDAR_TYPE: ${{ inputs.calendar_type }}
+        TIMEZONE: ${{ inputs.timezone }}
+        APP_DIR: ${{ inputs.app_dir }}
+
